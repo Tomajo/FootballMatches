@@ -63,8 +63,6 @@ for(i in 1976:2016){
     }
 }
 
-#fem proves per enumerar les jornades i així poder fer fàcil comparacions 
-
-
+#fem proves per enumerar les jornades i així poder fer fàcil comparacions
 distinct(select(dadesLliga,temporada,round))
 
