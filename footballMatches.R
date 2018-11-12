@@ -40,29 +40,60 @@ golsFavorContra<-inner_join(local,visitant,by=c("localTeam"="visitorTeam",c("sea
 dadesLliga$temporada<-as.numeric(substr(dadesLliga$season,1,4))
 
 #Faig camp equip per fer els calculs a dins el bucle
-dadesLliga$equip<-as.numeric(dadesLliga$localTeam)
+dadesLliga$equipCasa<-as.numeric(dadesLliga$localTeam)
+dadesLliga$equipVisitant<-as.numeric(dadesLliga$visitorTeam)
 
-dadesLliga["golsCasaFavor"]<-NA
-dadesLliga["golsCasaEncaixats"]<-NA
-for(i in 1976:2016){
-    for (j in unique(dadesLliga[dadesLliga$temporada==i,]$round)){
-        print(c("La Temporada es: ", i, " La Jornada es ", j))
-        for(k in (dadesLliga[dadesLliga$temporada==i & dadesLliga$round==j,]$equip)){
-            gols<-select(dadesLliga,localTeam,visitorTeam,localGoals,visitorGoals,temporada,round,equip) %>% 
-                filter(equip==k &(temporada<i & temporada >(i-5) | temporada==i & round<j))%>%
-                group_by(equip) %>% 
-                summarise(golsCasaFavor=sum(localGoals),golsCasaEncaixats=sum(visitorGoals))
-            if(length(gols$golsCasaFavor)==0){
-                dadesLliga[dadesLliga$temporada==i & dadesLliga$round==j & as.numeric(dadesLliga$equip)==k,]$golsCasaFavor<-0
-                dadesLliga[dadesLliga$temporada==i & dadesLliga$round==j & as.numeric(dadesLliga$equip)==k,]$golsCasaEncaixats<-0
-            }else{
-                dadesLliga[dadesLliga$temporada==i & dadesLliga$round==j & as.numeric(dadesLliga$equip)==k,]$golsCasaFavor<-as.numeric(gols$golsCasaFavor)
-                dadesLliga[dadesLliga$temporada==i & dadesLliga$round==j & as.numeric(dadesLliga$equip)==k,]$golsCasaEncaixats<-as.numeric(gols$golsCasaEncaixats)
-            }
-        }
+
+
+#TODO: Falta repensar com fer el compteig de gols a favor i gols en contra.
+###########################################################################
+#faig les mitjes dels encaixats a casa i fora i els marcats a casa i fora per cada equip
+############################
+
+
+mitjesTotals<-dadesLliga %>% group_by(season,division) %>% summarise(localGoals=mean(localGoals),visitorGoals=mean(visitorGoals),equipsLocalsTemporada=n_distinct(localTeam),equipsVisitantsTemporada=n_distinct(visitorTeam))
+mitjesEquipsEncaixatsLocal<-dadesLliga %>% group_by(season,division,team=localTeam) %>% summarise(localGoalsEncaixats=mean(visitorGoals))
+mitjesEquipsMarcatsLocal<-dadesLliga %>% group_by(season,division,team=localTeam) %>% summarise(localGoalsMarcats=mean(localGoals))
+mitjesEquipsMarcatsVisitant<-dadesLliga %>% group_by(season,division,team=visitorTeam) %>% summarise(visitorGoalsMarcats=mean(visitorGoals))
+mitjesEquipsEncaixatVisitant<-dadesLliga %>% group_by(season,division,team=visitorTeam) %>% summarise(visitorGoalsEncaixats=mean(localGoals))
+
+iner1<-inner_join(mitjesTotals,mitjesEquipsEncaixatsLocal,by=c("season","division"))
+iner2<-inner_join(iner1,mitjesEquipsMarcatsLocal,by=c("season","division","team"))
+iner3<-inner_join(iner2,mitjesEquipsMarcatsVisitant,by=c("season","division","team"))
+resultats<-inner_join(iner3,mitjesEquipsEncaixatVisitant,by=c("season","division","team"))
+resultats$awayDefensiveStrength<-resultats$visitorGoalsEncaixats/resultats$localGoals
+resultats$awayAttackStrength<-resultats$visitorGoalsMarcats/resultats$visitorGoals
+resultats$homeDefensiveStrength<-resultats$localGoalsEncaixats/resultats$visitorGoals
+resultats$homeAttackStrength<-resultats$localGoalsMarcats/resultats$localGoals
+resultats$projHomeTeamGoals<-resultats$homeAttackStrength*resultats$awayDefensiveStrength*resultats$localGoals
+resultats$projVisitorTeamGoals<-resultats$awayAttackStrength*resultats$homeDefensiveStrength*resultats$visitorGoals
+
+# for(i in 1976:2016){
+#     for (j in unique(dadesLliga[dadesLliga$temporada==i,]$round)){
+#         print(c("La Temporada es: ", i, " La Jornada es ", j))
+#  
+#     }
+# }
+
+
+
+
+# Calcul de la matriu per un partit
+#Falta iterar per tots els partits tenin en compte les dades de la temporada passada....
+#revisar si els resultats tenen sentit.... amb les dades de l Barça.
+dadesLliga%>%filter(str_detect(localTeam,'Barcelona'))
+prob_matrix<-data.frame()
+for (i in 0:10 ){      # i= Home Team Goals
+    
+    for (j in 0:10){      # j= Visitor Team Goals
+        
+        prob_matrix[i+1,j+1]<-round(dpois(i,resultats$projHomeTeamGoals[1])*dpois(j,resultats$projVisitorTeamGoals[1])*100,2)
+        
     }
 }
-
+row.names(prob_matrix)<-0:10
+colnames(prob_matrix)<-0:10
+prob_matrix
 #fem proves per enumerar les jornades i així poder fer fàcil comparacions
 distinct(select(dadesLliga,temporada,round))
 
